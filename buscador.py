@@ -6,7 +6,7 @@ import os
 import glob
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="Hemeroteca Master", page_icon="🏛️", layout="wide")
+st.set_page_config(page_title="Hemeroteca Lambayeque", page_icon="📰", layout="wide")
 
 # --- FUNCIONES ---
 def normalizar_texto(texto):
@@ -23,44 +23,36 @@ def formatear_fecha(valor):
 
 @st.cache_data
 def cargar_biblioteca():
-    # CAMBIO IMPORTANTE: Busca archivos Excel AQUÍ MISMO (en la raíz), no en carpetas
-    # Excluimos archivos temporales de Excel (los que empiezan con ~$)
+    # Busca archivos Excel sueltos (ignora los temporales ~$)
     todos_xlsx = glob.glob("*.xlsx") + glob.glob("*.xls")
     archivos = [f for f in todos_xlsx if not os.path.basename(f).startswith('~$')]
     
     lista_dfs = []
     
-    # Barra de progreso
     if not archivos:
         return pd.DataFrame(), 0
 
-    barra = st.progress(0)
-    
+    # Barra de carga invisible (para que sea rápido)
     for i, ruta in enumerate(archivos):
         try:
-            # Header 1 porque tu archivo tiene título en la fila 1
-            df_temp = pd.read_excel(ruta, header=1)
-            df_temp['Origen'] = os.path.basename(ruta)
-            lista_dfs.append(df_temp)
-        except Exception:
-            # Si falla, intentamos sin saltar filas (header=0) por si acaso
+            # header=1 (fila 2 es titulo). Si falla, intenta header=0
             try:
-                df_temp = pd.read_excel(ruta, header=0)
-                df_temp['Origen'] = os.path.basename(ruta)
-                lista_dfs.append(df_temp)
+                df_temp = pd.read_excel(ruta, header=1)
             except:
-                pass
-        
-        barra.progress((i + 1) / len(archivos))
-    
-    barra.empty()
-    
+                df_temp = pd.read_excel(ruta, header=0)
+                
+            lista_dfs.append(df_temp)
+        except:
+            pass
+            
     if lista_dfs:
         return pd.concat(lista_dfs, ignore_index=True), len(archivos)
     return pd.DataFrame(), 0
 
 # --- INTERFAZ ---
-st.title("🏛️ Buscador Hemeroteca Global")
+
+# 1. TU TÍTULO PERSONALIZADO
+st.title('HEMEROTECA "LAMBAYEQUE" de Miandito (Miguel Angel Diaz Torres)')
 st.markdown("---")
 
 df, cantidad = cargar_biblioteca()
@@ -79,16 +71,20 @@ if not df.empty:
     if col_tomo and col_pag:
         df['Ubicación'] = df.apply(lambda r: f"📘 T.{r[col_tomo]} | 📄 P.{r[col_pag]}", axis=1)
     else:
-        df['Ubicación'] = "Ver Excel Original"
+        df['Ubicación'] = "Ver Excel"
 
-    cols_texto = [c for c in df.columns if c not in ['Busqueda_Index']]
+    # Indice de búsqueda
+    cols_texto = [c for c in df.columns if c != 'Busqueda_Index']
     df['Busqueda_Index'] = df[cols_texto].fillna('').astype(str).agg(' '.join, axis=1).apply(normalizar_texto)
 
+    # Mensaje de estado
+    st.success(f"✅ Sistema activo: {cantidad} libros cargados ({len(df)} recortes).")
+
     # Buscador
-    st.success(f"✅ Buscando en **{cantidad} libros** ({len(df)} recortes).")
-    busqueda = st.text_input("🔍 ¿Qué buscas?", placeholder="Escribe aquí...")
+    busqueda = st.text_input("🔍 Buscar:", placeholder="Escribe título, tema o año...")
     
-    cols_mostrar = ['Titulo', 'Autor', 'Fecha_Legible', 'Periodico', 'Observaciones', 'Ubicación', 'Origen']
+    # 2. SELECCIÓN DE COLUMNAS (YA NO ESTÁ 'ORIGEN')
+    cols_mostrar = ['Titulo', 'Autor', 'Fecha_Legible', 'Periodico', 'Observaciones', 'Ubicación']
     cols_finales = [c for c in cols_mostrar if c in df.columns]
 
     if busqueda:
@@ -97,8 +93,11 @@ if not df.empty:
             st.info(f"Encontrados: {len(res)}")
             st.dataframe(res[cols_finales], use_container_width=True, hide_index=True)
         else:
-            st.warning("Sin resultados.")
+            st.warning("No hay resultados.")
     else:
+        # Muestra los primeros 10
         st.dataframe(df.head(10)[cols_finales], use_container_width=True, hide_index=True)
+
 else:
-    st.warning("⚠️ No encontré archivos Excel junto a este programa.")
+    st.error("⚠️ No encontré los archivos Excel.")
+    st.info("Asegúrate de que los archivos .xlsx estén en la misma carpeta que este código.")
